@@ -53,7 +53,26 @@ app = FastAPI(
 app.add_middleware(GZIPMiddleware, minimum_size=1000)
 
 # ============================================================================
-# MIDDLEWARE: CORS (SEGURO E CORRETO)
+# MIDDLEWARE: DEBUG CORS (TEMPORÁRIO - REMOVER DEPOIS)
+# ============================================================================
+
+@app.middleware("http")
+async def cors_debug_middleware(request, call_next):
+    """Debug middleware para verificar CORS"""
+    origin = request.headers.get("origin")
+    if origin:
+        logger.info(f"🔍 CORS DEBUG - Origin: {origin}")
+    
+    response = await call_next(request)
+    
+    # Log CORS headers
+    if "access-control-allow-origin" in response.headers:
+        logger.info(f"✅ CORS Header: {response.headers['access-control-allow-origin']}")
+    
+    return response
+
+# ============================================================================
+# MIDDLEWARE: CORS (VERSÃO CORRIGIDA - SEM WILDCARD)
 # ============================================================================
 
 app.add_middleware(
@@ -65,16 +84,19 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8000",
         
-        # Produção (Vercel)
+        # Produção (Vercel) - ESPECÍFICO, SEM WILDCARD
         "https://veneto-delivery.vercel.app",
-        
-        # Preview (Vercel Preview Deployments)
-        "https://*.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    max_age=3600,  # Cache CORS por 1 hora
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+    ],
+    expose_headers=["Content-Type"],
+    max_age=86400,  # Cache CORS por 24 horas
 )
 
 # ============================================================================

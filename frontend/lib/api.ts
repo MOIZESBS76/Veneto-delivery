@@ -1,10 +1,15 @@
 // frontend/lib/api.ts
 
 // ============================================================================
-// CONFIGURAÇÃO DA API
+// CONFIGURAÇÃO DA API - COM DETECÇÃO DE AMBIENTE
 // ============================================================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+// Em produção (Vercel): usa /api/v1 (proxy local)
+// Em desenvolvimento: usa http://localhost:8000/api/v1 (backend local)
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? '/api/v1'
+  : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
 const API_TIMEOUT = 60000; // 60 segundos para 4G
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
@@ -120,7 +125,7 @@ class ApiError extends Error {
 }
 
 // ============================================================================
-// CACHE EM MEMÓRIA
+// CACHE EM MEMÓRIA E LOCALSTORAGE
 // ============================================================================
 
 interface CacheEntry<T> {
@@ -131,6 +136,9 @@ interface CacheEntry<T> {
 const memoryCache = new Map<string, CacheEntry<any>>();
 const localStorageCache = typeof window !== 'undefined' ? window.localStorage : null;
 
+/**
+ * Gera chave de cache única baseada em endpoint e parâmetros
+ */
 function getCacheKey(endpoint: string, params?: Record<string, any>): string {
   if (!params) return endpoint;
   const paramStr = Object.entries(params)
@@ -140,6 +148,9 @@ function getCacheKey(endpoint: string, params?: Record<string, any>): string {
   return `${endpoint}?${paramStr}`;
 }
 
+/**
+ * Obtém dados do cache em memória
+ */
 function getFromMemoryCache<T>(key: string): T | null {
   const entry = memoryCache.get(key);
   if (!entry) return null;
@@ -154,6 +165,9 @@ function getFromMemoryCache<T>(key: string): T | null {
   return entry.data;
 }
 
+/**
+ * Salva dados no cache em memória
+ */
 function setMemoryCache<T>(key: string, data: T): void {
   memoryCache.set(key, {
     data,
@@ -162,6 +176,9 @@ function setMemoryCache<T>(key: string, data: T): void {
   console.log(`💾 Cache SET (memória): ${key}`);
 }
 
+/**
+ * Obtém dados do localStorage
+ */
 function getFromLocalStorage<T>(key: string): T | null {
   if (!localStorageCache) return null;
 
@@ -185,6 +202,9 @@ function getFromLocalStorage<T>(key: string): T | null {
   }
 }
 
+/**
+ * Salva dados no localStorage
+ */
 function setLocalStorage<T>(key: string, data: T): void {
   if (!localStorageCache) return;
 
@@ -200,15 +220,19 @@ function setLocalStorage<T>(key: string, data: T): void {
   }
 }
 
+/**
+ * Obtém dados do cache (memória primeiro, depois localStorage)
+ */
 function getFromCache<T>(key: string): T | null {
-  // Tentar memória primeiro (mais rápido)
   const memoryData = getFromMemoryCache<T>(key);
   if (memoryData) return memoryData;
 
-  // Depois tentar localStorage (fallback)
   return getFromLocalStorage<T>(key);
 }
 
+/**
+ * Salva dados em ambos os caches
+ */
 function setCache<T>(key: string, data: T): void {
   setMemoryCache(key, data);
   setLocalStorage(key, data);
@@ -218,6 +242,9 @@ function setCache<T>(key: string, data: T): void {
 // FUNÇÃO AUXILIAR: Fazer Requisição com Timeout e Retry
 // ============================================================================
 
+/**
+ * Faz requisição com retry automático e timeout
+ */
 async function fetchWithRetry(
   url: string,
   options: RequestInit = {},
@@ -283,6 +310,9 @@ async function fetchWithRetry(
 // FUNÇÃO AUXILIAR: Extrair Dados da Resposta
 // ============================================================================
 
+/**
+ * Extrai e valida dados da resposta JSON
+ */
 async function parseResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type');
   if (!contentType || !contentType.includes('application/json')) {
@@ -313,11 +343,11 @@ async function parseResponse<T>(response: Response): Promise<T> {
  * Busca todos os produtos de uma loja específica com cache
  * @param storeId - ID da loja
  * @returns Array de produtos
- * @throws ApiError se a requisição falhar
+ * @throws Error se a requisição falhar
  */
 export async function getProductsByStore(storeId: number): Promise<Product[]> {
   try {
-    const cacheKey = getCacheKey(`/stores/${storeId}/products`);
+    const cacheKey = getCacheKey(`/stores/${storeId}/products`, { storeId });
 
     // Tentar usar cache
     const cachedData = getFromCache<Product[]>(cacheKey);
@@ -359,11 +389,11 @@ export async function getProductsByStore(storeId: number): Promise<Product[]> {
  * Busca todas as categorias de uma loja específica com cache
  * @param storeId - ID da loja
  * @returns Array de categorias
- * @throws ApiError se a requisição falhar
+ * @throws Error se a requisição falhar
  */
 export async function getCategoriesByStore(storeId: number): Promise<Category[]> {
   try {
-    const cacheKey = getCacheKey(`/stores/${storeId}/categories`);
+    const cacheKey = getCacheKey(`/stores/${storeId}/categories`, { storeId });
 
     // Tentar usar cache
     const cachedData = getFromCache<Category[]>(cacheKey);
@@ -405,7 +435,7 @@ export async function getCategoriesByStore(storeId: number): Promise<Category[]>
  * Cria um novo pedido
  * @param order - Dados do pedido
  * @returns Pedido criado com ID e código
- * @throws ApiError se a requisição falhar
+ * @throws Error se a requisição falhar
  */
 export async function createOrder(order: CreateOrderRequest): Promise<Order> {
   try {
@@ -460,7 +490,7 @@ export async function createOrder(order: CreateOrderRequest): Promise<Order> {
  * Busca um pedido específico pelo código
  * @param orderCode - Código do pedido
  * @returns Dados do pedido
- * @throws ApiError se a requisição falhar
+ * @throws Error se a requisição falhar
  */
 export async function getOrderByCode(orderCode: string): Promise<Order> {
   try {
@@ -490,11 +520,11 @@ export async function getOrderByCode(orderCode: string): Promise<Order> {
  * Busca informações de uma loja específica com cache
  * @param storeId - ID da loja
  * @returns Dados da loja
- * @throws ApiError se a requisição falhar
+ * @throws Error se a requisição falhar
  */
 export async function getStoreById(storeId: number): Promise<any> {
   try {
-    const cacheKey = getCacheKey(`/stores/${storeId}`);
+    const cacheKey = getCacheKey(`/stores/${storeId}`, { storeId });
 
     // Tentar usar cache
     const cachedData = getFromCache<any>(cacheKey);
@@ -533,10 +563,15 @@ export async function getStoreById(storeId: number): Promise<any> {
  */
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const url = `${API_BASE_URL.replace('/api/v1', '')}/health`;
+    // Em produção, usar proxy local; em desenvolvimento, usar backend direto
+    const url = process.env.NODE_ENV === 'production'
+      ? '/health'
+      : 'http://localhost:8000/health';
+
     const response = await fetch(url, {
       signal: AbortSignal.timeout(5000),
     });
+
     const isHealthy = response.ok;
     console.log(`${isHealthy ? '✅' : '❌'} API ${isHealthy ? 'está saudável' : 'está indisponível'}`);
     return isHealthy;
@@ -557,7 +592,7 @@ export function clearCache(): void {
   memoryCache.clear();
   if (localStorageCache) {
     Object.keys(localStorageCache).forEach((key) => {
-      if (key.includes('veneto')) {
+      if (key.includes('veneto') || key.includes('stores') || key.includes('products')) {
         localStorageCache.removeItem(key);
       }
     });
