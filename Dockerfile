@@ -1,24 +1,24 @@
 # ============================================================================
-# BUILD STAGE
+# BUILD STAGE - Compilar dependências
 # ============================================================================
 FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-# Instalar dependências do sistema
+# Instalar dependências do sistema necessárias para build
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements do backend (CAMINHO CORRETO)
-COPY backend/requirements.txt .
+# Copiar APENAS requirements.txt (caminho absoluto do contexto)
+COPY backend/requirements.txt ./requirements.txt
 
-# Instalar dependências Python
-RUN pip install --no-cache-dir -r requirements.txt
+# Instalar dependências Python em diretório isolado
+RUN pip install --no-cache-dir --user -r requirements.txt
 
 # ============================================================================
-# RUNTIME STAGE
+# RUNTIME STAGE - Imagem final
 # ============================================================================
 FROM python:3.11-slim
 
@@ -29,9 +29,11 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar dependências do builder
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copiar dependências Python do builder
+COPY --from=builder /root/.local /root/.local
+
+# Definir PATH para usar dependências do builder
+ENV PATH=/root/.local/bin:$PATH
 
 # Copiar código da aplicação do backend
 COPY backend/ .
