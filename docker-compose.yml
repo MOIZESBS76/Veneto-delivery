@@ -1,0 +1,195 @@
+# ============================================================================
+# DOCKER COMPOSE - PIZZA DELIVERY SYSTEM
+# ============================================================================
+# Versão: 3.9 (compatível com Docker Engine 20.10+)
+# Ambiente: Desenvolvimento e Produção
+# Projeto: Sistema de Delivery para Pizzarias de Maricá
+# ============================================================================
+
+version: '3.9'
+
+services:
+  # ============================================================================
+  # POSTGRESQL - BANCO DE DADOS PRINCIPAL
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: pizza_postgres
+    restart: unless-stopped
+    
+    environment:
+      # Configuração do Banco
+      POSTGRES_DB: pizza_delivery
+      POSTGRES_USER: pizza_user
+      POSTGRES_PASSWORD: pizza_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=pt_BR.UTF-8"
+    
+    ports:
+      - "5432:5432"
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Script de inicialização (opcional)
+      # - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pizza_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    networks:
+      - pizza_network
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # REDIS - CACHE E SESSÕES
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: pizza_redis
+    restart: unless-stopped
+    
+    ports:
+      - "6379:6379"
+    
+    # ✅ CORRIGIDO: Sem --requirepass quando não há senha
+    command: redis-server --appendonly yes
+    
+    volumes:
+      - redis_data:/data
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    networks:
+      - pizza_network
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # BACKEND - FASTAPI
+  # ============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    
+    container_name: pizza_backend
+    restart: unless-stopped
+    
+    ports:
+      - "8000:8000"
+    
+    environment:
+      # ========== BANCO DE DADOS ==========
+      DATABASE_URL: postgresql://pizza_user:pizza_password@postgres:5432/pizza_delivery
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: pizza_delivery
+      POSTGRES_USER: pizza_user
+      POSTGRES_PASSWORD: pizza_password
+      
+      # ========== REDIS ==========
+      REDIS_URL: redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # ========== APLICAÇÃO ==========
+      SECRET_KEY: sua-chave-secreta-super-segura-mude-em-producao
+      DEBUG: "False"
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      APP_NAME: Pizza Delivery API
+      APP_VERSION: 0.1.0
+      
+      # ========== WHATSAPP (FUTURO) ==========
+      WHATSAPP_API_KEY: ""
+      WHATSAPP_PHONE_ID: ""
+      
+      # ========== PAGAMENTO (FUTURO) ==========
+      STRIPE_API_KEY: ""
+      STRIPE_WEBHOOK_SECRET: ""
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    
+    # ✅ Comando otimizado para desenvolvimento
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    
+    networks:
+      - pizza_network
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================================
+  # FRONTEND - NEXT.JS (DESCOMENTE QUANDO PRONTO)
+  # ============================================================================
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: pizza_frontend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     NEXT_PUBLIC_API_URL: http://localhost:8000
+  #     NEXT_PUBLIC_APP_NAME: Pizza Delivery
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - pizza_network
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+
+# ============================================================================
+# VOLUMES - PERSISTÊNCIA DE DADOS
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ============================================================================
+# NETWORKS - COMUNICAÇÃO ENTRE SERVIÇOS
+# ============================================================================
+networks:
+  pizza_network:
+    driver: bridge
