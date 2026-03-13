@@ -53,20 +53,26 @@ app = FastAPI(
 app.add_middleware(GZIPMiddleware, minimum_size=1000)
 
 # ============================================================================
-# MIDDLEWARE: CORS (SEGURO)
+# MIDDLEWARE: CORS (SEGURO E CORRETO)
 # ============================================================================
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        # Desenvolvimento Local
         "http://localhost:3000",
         "http://localhost:8000",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8000",
-        "https://veneto-delivery.vercel.app",  # PRODUÇÃO
+        
+        # Produção (Vercel)
+        "https://veneto-delivery.vercel.app",
+        
+        # Preview (Vercel Preview Deployments)
+        "https://*.vercel.app",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     max_age=3600,  # Cache CORS por 1 hora
 )
