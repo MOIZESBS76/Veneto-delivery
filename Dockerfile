@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements do backend (CAMINHO CORRETO)
-COPY backend/requirements.txt ./requirements.txt
+COPY backend/requirements.txt .
 
 # Instalar dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
@@ -33,7 +33,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copiar código da aplicação do backend (CAMINHO CORRETO)
+# Copiar código da aplicação do backend
 COPY backend/ .
 
 # Expor porta
